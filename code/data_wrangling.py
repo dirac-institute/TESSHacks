@@ -97,4 +97,71 @@ def crossmatch_gaia(tess_info, gaia_files):
    tess_gaia = pd.merge(tess_info, gaiamatch, left_on="tess_id", right_on="ticid")
 
    return tess_gaia
+
+
+def read_tess_lightcurve(filename, pdc=True, quality_flag=0):
+    """
+    Read out a TESS light curve out of a light curve file.
+    
+    Parameters
+    ----------
+    filename : str
+        The path and file name of the FITS file to be read
+        
+    pdc : bool, default True
+        If True, use the Pre-search Data Conditioning (PDC)
+        corrected light curve (`PDCSAP_FLUX`). If False, 
+        then read out the uncorrected light curves (`SAP_FLUX`).
+        Note: the uncorrected light curves have lots of instrumental
+        effects, but the corrected ones might have smoothed out 
+        some periodic structure.
+        
+    quality_flag, int, default 0
+        The quality flag to denote "good" data, default is 0
+    """
+    hdulist = fits.open(fname)
+    # get out some header information
+    
+    data = {}
+    data["tstart"] = hdulist[0].header["TSTART"]
+    data["tstop"] = hdulist[0].header["TSTOP"]
+    data["date_obs"] = hdulist[0].header["DATE-OBS"]
+    data["date_end"] = hdulist[0].header["DATE-END"]
+    data["ticid"] = hdulist[0].header["TICID"]
+    data["ra"] = hdulist[0].header["RA_OBJ"]
+    data["dec"] = hdulist[0].header["DEC_OBJ"]
+    data["pmra"] = hdulist[0].header["PMRA"]
+    data["pmdec"] = hdulist[0].header["PMDEC"]
+    data["pmtotal"] = hdulist[0].header["PMTOTAL"]
+    data["tessmag"] = hdulist[0].header["TESSMAG"]
+    data["teff"] = hdulist[0].header["TEFF"]
+    data["log_g"] = hdulist[0].header["LOGG"]
+    data["mh"] = hdulist[0].header["MH"]
+    data["radius"] = hdulist[0].header["RADIUS"]
+    
+    # set the correct key for reading out the flux
+    flux_key = "SAP_FLUX"
+    flux_err_key = "SAP_FLUX_ERR"
+
+    if pdc:
+        flux_key = "PDC%s"%flux_key
+        flux_err_key = "PDC%s"%flux_err_key
+        
+    # read out the actual data
+    # note: first data point in flux and flux_err seems 
+    # to be NaN, so I'm going to exclude it:
+    time = hdulist[1].data.field("TIME")[1:]
+    flux = hdulist[1].data.field("PDCSAP_FLUX")[1:]
+    flux_err = hdulist[1].data.field("PDCSAP_FLUX_ERR")[1:]
+    quality = hdulist[1].data.field("QUALITY")[1:]
+    hdulist.close()
+    
+    # get out good quality data and point that are 
+    # not NaN or inf
+    mask = (quality == quality_flag) & (np.isfinite(flux))
+    
+    data["time"] = time[mask]
+    data["flux"] = flux[mask]
+    data["flux_err"] = flux_err[mask]
+    return data
    
